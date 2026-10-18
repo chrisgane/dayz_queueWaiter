@@ -22,7 +22,8 @@ PowerShell, run `Get-FileHash .\queuewaiter.exe`.
 
 ## Use
 
-1. Start `queuewaiter.exe`. A small console window opens and stays open.
+1. Start `queuewaiter.exe`. A small console window opens and stays open,
+   and you hear a short beep (so you know sound works).
 2. Start DayZ and open the server browser.
 3. Hover the mouse over the server (don't click), then press **F8**. You
    hear two rising beeps when it starts.
@@ -31,7 +32,12 @@ PowerShell, run `Get-FileHash .\queuewaiter.exe`.
 5. When you get in, you hear a tune three times and the window says
    **You're in!**
 
-To stop at any time, press **F8** again or move the mouse. Switching away
+If F8 does nothing, click into the app's window and press **Enter**
+instead. It beeps a 5-second countdown: switch to DayZ (Alt+Tab) and hover
+over the server before it ends.
+
+To stop at any time, press **F8** again (or Enter in the app's window) or
+move the mouse. Switching away
 from DayZ (Alt+Tab) pauses it: nothing is clicked or pressed unless DayZ is
 the active window.
 

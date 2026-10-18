@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"time"
 	"unsafe"
@@ -35,10 +34,6 @@ import (
 )
 
 const (
-	hotkeyStart = 1 // F8: start / stop
-	hotkeyShot  = 2 // F7: save what the app sees
-	vkF7, vkF8  = 0x76, 0x77
-
 	// The mouse counts as moved if it's this many pixels from the server.
 	mouseSlack = 10
 )
@@ -64,14 +59,17 @@ func main() {
 	fmt.Println("  2. Press F8. It keeps trying to join until you get in.")
 	fmt.Println("  3. Press F8 again, or move the mouse, to stop.")
 	fmt.Println()
+	fmt.Println("  If F8 does nothing, press Enter in this window instead, then within")
+	fmt.Println("  5 seconds switch to DayZ and hover over the server.")
+	fmt.Println()
 	fmt.Println("  F7 saves a screenshot of what this app sees, for troubleshooting.")
 	fmt.Println()
 	fmt.Printf("Server %s. Tries every %v-%v, for up to %v.\n\n", *server, *minGap, *maxGap, *giveUp)
 
-	keys := make(chan int, 4)
-	if err := listenHotkeys(keys); err != nil {
-		fatal(err)
-	}
+	keys := make(chan key, 4)
+	go watchKeys(keys)
+	go watchConsole(keys)
+	soundReady()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
@@ -80,7 +78,7 @@ func main() {
 
 	settings := waiter.Settings{MinGap: *minGap, MaxGap: *maxGap, GiveUp: *giveUp}
 	var stop chan struct{} // set while a run is going
-	stopping := false
+	stopping, counting := false, false
 	done := make(chan struct{})
 	for {
 		select {
@@ -93,15 +91,34 @@ func main() {
 			}
 			return
 		case k := <-keys:
+			if k == keyF8 {
+				logger.Println("F8 pressed.")
+			}
+			begin := false
 			switch {
-			case k == hotkeyShot:
+			case k == keyShot:
+				logger.Println("F7 pressed.")
 				saveShot()
+			case k == keyCountdown:
+				// Ignored if F8 started a run during the countdown.
+				begin = counting && stop == nil
+				counting = false
 			case stop != nil:
 				if !stopping {
+					logger.Println("Stopping.")
 					close(stop)
 					stopping = true
 				}
-			default:
+			case k == keyConsole:
+				if !counting {
+					counting = true
+					logger.Println("Starting in 5 seconds: switch to DayZ and hover over the server.")
+					go countdown(keys)
+				}
+			case k == keyF8:
+				begin = true
+			}
+			if begin {
 				// Drop a stale "place opened" from before this run.
 				select {
 				case <-slot:
@@ -336,50 +353,6 @@ func save(f *detect.BGRA, st detect.State) {
 		return
 	}
 	logger.Printf("Saved what I see (%v) to %s", st, name)
-}
-
-type msg struct {
-	Hwnd    uintptr
-	Message uint32
-	WParam  uintptr
-	LParam  uintptr
-	Time    uint32
-	Pt      point
-	Private uint32
-}
-
-// listenHotkeys registers F7 and F8 for the whole system and sends their
-// ids to out.
-func listenHotkeys(out chan<- int) error {
-	const modNoRepeat, wmHotkey = 0x4000, 0x0312
-	errc := make(chan error, 1)
-	go func() {
-		runtime.LockOSThread()
-		for _, k := range []struct {
-			id   int
-			vk   uintptr
-			name string
-		}{{hotkeyStart, vkF8, "F8"}, {hotkeyShot, vkF7, "F7"}} {
-			if r, _, err := pRegisterHotKey.Call(0, uintptr(k.id), modNoRepeat, k.vk); r == 0 {
-				errc <- fmt.Errorf("couldn't set up the %s key (%v). Is another program using it?", k.name, err)
-				return
-			}
-		}
-		errc <- nil
-		var m msg
-		for {
-			if r, _, _ := pGetMessageW.Call(uintptr(unsafe.Pointer(&m)), 0, 0, 0); int32(r) <= 0 {
-				return
-			}
-			if m.Message == wmHotkey {
-				select {
-				case out <- int(m.WParam):
-				default:
-				}
-			}
-		}
-	}()
-	return <-errc
 }
 
 func setTitle(s string) {
