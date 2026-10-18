@@ -1,0 +1,44 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: |
+          go vet ./...
+          GOOS=windows go vet ./...
+      - name: Test
+        run: go test -race ./...
+      - name: Build queuewaiter.exe
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/queuewaiter.exe ./cmd/queuewaiter
+      - name: Checksum
+        # Shown on the run's page (independent of the download) and shipped
+        # alongside the exe. Compare with: Get-FileHash .\queuewaiter.exe
+        run: |
+          hash=$(sha256sum dist/queuewaiter.exe | cut -d' ' -f1 | tr a-f A-F)
+          echo "$hash  queuewaiter.exe" > dist/SHA256.txt
+          {
+            echo "### queuewaiter.exe SHA-256"
+            echo '```'
+            echo "$hash"
+            echo '```'
+            echo 'Check a download in PowerShell: `Get-FileHash .\queuewaiter.exe`'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: queuewaiter-windows
+          path: |
+            dist/queuewaiter.exe
+            dist/SHA256.txt
