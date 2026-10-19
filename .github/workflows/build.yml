@@ -22,7 +22,7 @@ jobs:
       - name: Test
         run: go test -race ./...
       - name: Build queuewaiter.exe
-        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/queuewaiter.exe ./cmd/queuewaiter
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${{ github.run_number }}" -o dist/queuewaiter.exe ./cmd/queuewaiter
       - name: Checksum
         # Shown on the run's page (independent of the download) and shipped
         # alongside the exe. Compare with: Get-FileHash .\queuewaiter.exe

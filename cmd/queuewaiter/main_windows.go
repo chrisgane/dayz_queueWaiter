@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net"
@@ -40,6 +41,9 @@ const (
 
 var logger = log.New(os.Stdout, "", log.Ltime)
 
+// version is the build number, set by the build.
+var version = "dev"
+
 func main() {
 	server := flag.String("server", "54.38.209.2:2302", "the server's IP:port, as shown in DayZ's server browser")
 	queryPort := flag.Int("query", 0, "the server's query port (0: ask Steam)")
@@ -51,9 +55,10 @@ func main() {
 		fatal(errors.New("-min must be above 0, -max at least -min, and -giveup above 0"))
 	}
 
+	logPath := openLog()
 	dpiAware()
 	setTitle("DayZ Queue Waiter")
-	fmt.Println("DayZ Queue Waiter")
+	fmt.Println("DayZ Queue Waiter, build " + version)
 	fmt.Println()
 	fmt.Println("  1. In DayZ's server browser, hover the mouse over the server.")
 	fmt.Println("  2. Press F8. It keeps trying to join until you get in.")
@@ -70,6 +75,7 @@ func main() {
 	go watchKeys(keys)
 	go watchConsole(keys)
 	soundReady()
+	logger.Printf("Ready (build %s). Everything shown here is also saved to %s", version, logPath)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
@@ -139,8 +145,10 @@ func main() {
 // so, starts trying in the background. done is signalled when it ends.
 func start(settings waiter.Settings, slot <-chan struct{}, stop chan struct{}, done chan<- struct{}) bool {
 	at := cursorPos()
+	title, exe := foreground()
+	logger.Printf("Mouse at (%d, %d). Active window: %q, program %q.", at.X, at.Y, title, exe)
 	if !dayzInFront() {
-		logger.Println("DayZ isn't the active window. Open its server browser, hover over the server, then press F8.")
+		logger.Println("That isn't DayZ. Open its server browser, hover over the server, then press F8.")
 		soundError()
 		return false
 	}
@@ -159,6 +167,7 @@ func start(settings waiter.Settings, slot <-chan struct{}, stop chan struct{}, d
 	}
 	st := detect.Classify(frame)
 	mon, _ := monitorAt(at.X, at.Y)
+	logger.Printf("Screen %dx%d via %s: I see %v.", frame.W, frame.H, capture.Method(), st)
 	switch {
 	case st == detect.Away && detect.Brightness(frame) < 3:
 		logger.Printf("The screen reads as black (using %s).", capture.Method())
@@ -353,6 +362,22 @@ func save(f *detect.BGRA, st detect.State) {
 		return
 	}
 	logger.Printf("Saved what I see (%v) to %s", st, name)
+}
+
+// openLog copies everything printed to queuewaiter-log.txt next to the exe,
+// and returns its path.
+func openLog() string {
+	dir := "."
+	if exe, err := os.Executable(); err == nil {
+		dir = filepath.Dir(exe)
+	}
+	path := filepath.Join(dir, "queuewaiter-log.txt")
+	f, err := os.Create(path)
+	if err != nil {
+		return "(couldn't create a log file: " + err.Error() + ")"
+	}
+	logger.SetOutput(io.MultiWriter(os.Stdout, f))
+	return path
 }
 
 func setTitle(s string) {

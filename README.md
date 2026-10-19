@@ -86,6 +86,10 @@ It expects a 16:9 resolution (1920×1080, 2560×1440, 3840×2160, and so on).
 
 ## Troubleshooting
 
+Everything the app's window shows is also saved to `queuewaiter-log.txt`,
+next to the exe, starting fresh each time the app opens. The first line
+says which build you're running.
+
 Press **F7** at any time to save what the app sees to
 `queuewaiter-screenshot.png`, next to the exe. The window also shows what
 the app thinks is on screen. If it gets something wrong, send that

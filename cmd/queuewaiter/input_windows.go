@@ -17,8 +17,7 @@ var (
 	pSetCursorPos              = user32.NewProc("SetCursorPos")
 	pGetForegroundWindow       = user32.NewProc("GetForegroundWindow")
 	pGetWindowThreadProcessId  = user32.NewProc("GetWindowThreadProcessId")
-	pRegisterHotKey            = user32.NewProc("RegisterHotKey")
-	pGetMessageW               = user32.NewProc("GetMessageW")
+	pGetWindowTextW            = user32.NewProc("GetWindowTextW")
 	pSetProcessDpiAwarenessCtx = user32.NewProc("SetProcessDpiAwarenessContext")
 	pSetProcessDPIAware        = user32.NewProc("SetProcessDPIAware")
 )
@@ -45,24 +44,35 @@ func dpiAware() {
 
 // dayzInFront reports whether the active window belongs to DayZ.
 func dayzInFront() bool {
+	title, exe := foreground()
+	return strings.Contains(strings.ToLower(title), "dayz") || strings.HasPrefix(strings.ToLower(exe), "dayz")
+}
+
+// foreground returns the active window's title and program name. The
+// program name can be empty: anti-cheat may not let other programs look at
+// the game.
+func foreground() (title, exe string) {
 	hwnd, _, _ := pGetForegroundWindow.Call()
 	if hwnd == 0 {
-		return false
+		return "", ""
 	}
+	buf := make([]uint16, 256)
+	n, _, _ := pGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	title = windows.UTF16ToString(buf[:n])
+
 	var pid uint32
 	pGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 	if err != nil {
-		return false
+		return title, ""
 	}
 	defer windows.CloseHandle(h)
-	buf := make([]uint16, windows.MAX_PATH)
-	n := uint32(len(buf))
-	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &n); err != nil {
-		return false
+	path := make([]uint16, windows.MAX_PATH)
+	size := uint32(len(path))
+	if err := windows.QueryFullProcessImageName(h, 0, &path[0], &size); err != nil {
+		return title, ""
 	}
-	name := strings.ToLower(filepath.Base(windows.UTF16ToString(buf[:n])))
-	return strings.HasPrefix(name, "dayz")
+	return title, filepath.Base(windows.UTF16ToString(path[:size]))
 }
 
 // SendInput's INPUT, for the 64-bit layout.
